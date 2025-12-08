@@ -6,6 +6,7 @@ Mesure: WER, CER, latence, mémoire, comparaisons
 
 import argparse
 import time
+import os
 import torch
 import json
 from pathlib import Path
@@ -16,6 +17,12 @@ from tqdm import tqdm
 import pandas as pd
 from jiwer import wer, cer
 import sys
+
+# Configurer répertoire temporaire sur /workspace (plus d'espace)
+os.environ["TMPDIR"] = "/workspace/tmp"
+os.environ["TEMP"] = "/workspace/tmp"
+os.environ["TMP"] = "/workspace/tmp"
+os.makedirs("/workspace/tmp", exist_ok=True)
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 # Note: on utilise jiwer directement pour WER/CER
