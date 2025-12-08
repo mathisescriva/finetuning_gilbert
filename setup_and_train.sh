@@ -27,14 +27,29 @@ else
     fi
 fi
 
-# Créer environnement virtuel (optionnel mais recommandé)
-if [ ! -d "venv" ]; then
-    echo "📦 Création environnement virtuel..."
-    python3 -m venv venv
+# Vérifier espace disque
+echo "💾 Espace disque disponible:"
+df -h /workspace | tail -1
+
+# Nettoyer cache pip si espace insuffisant
+DISK_USAGE=$(df /workspace | tail -1 | awk '{print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -gt 80 ]; then
+    echo "⚠️  Espace disque faible, nettoyage du cache pip..."
+    pip cache purge 2>/dev/null || true
 fi
 
-echo "📦 Activation environnement virtuel..."
-source venv/bin/activate
+# Utiliser l'environnement conda existant si disponible, sinon créer venv
+if [ -n "$CONDA_DEFAULT_ENV" ]; then
+    echo "✅ Utilisation de l'environnement conda existant: $CONDA_DEFAULT_ENV"
+else
+    # Créer environnement virtuel seulement si pas de conda
+    if [ ! -d "venv" ]; then
+        echo "📦 Création environnement virtuel..."
+        python3 -m venv venv
+    fi
+    echo "📦 Activation environnement virtuel..."
+    source venv/bin/activate
+fi
 
 # Installer dépendances
 echo "📥 Installation des dépendances..."
