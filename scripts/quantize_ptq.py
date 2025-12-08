@@ -87,8 +87,10 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 for f in (output_path / "quantized").rglob("*") 
                 if f.is_file()
             ) / 1e9
+            original_size = sum(p.numel() * 4 for p in model.parameters()) / 1e9
+            reduction = (1 - total_size / original_size) * 100
             print(f"📊 Taille après quantization: ~{total_size:.2f} GB (int8)")
-            print(f"💾 Réduction: ~{(1 - total_size / (sum(p.numel() * 4 for p in model.parameters()) / 1e9)) * 100):.1f}%")
+            print(f"💾 Réduction: ~{reduction:.1f}%")
         
     except Exception as e:
         print(f"❌ Erreur lors de l'export/quantization: {e}")
