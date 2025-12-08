@@ -18,11 +18,33 @@ import pandas as pd
 from jiwer import wer, cer
 import sys
 
-# Configurer répertoire temporaire sur /workspace (plus d'espace)
-os.environ["TMPDIR"] = "/workspace/tmp"
-os.environ["TEMP"] = "/workspace/tmp"
-os.environ["TMP"] = "/workspace/tmp"
-os.makedirs("/workspace/tmp", exist_ok=True)
+# Configurer répertoire temporaire - utiliser /workspace si disponible, sinon /tmp
+# /workspace est souvent sur un disque avec plus d'espace
+temp_dirs = ["/workspace/tmp", "/tmp"]
+temp_dir = None
+for td in temp_dirs:
+    try:
+        os.makedirs(td, exist_ok=True)
+        # Test write
+        test_file = os.path.join(td, ".test_write")
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+        temp_dir = td
+        break
+    except (OSError, PermissionError):
+        continue
+
+if temp_dir:
+    os.environ["TMPDIR"] = temp_dir
+    os.environ["TEMP"] = temp_dir
+    os.environ["TMP"] = temp_dir
+else:
+    # Fallback: utiliser le répertoire courant
+    os.environ["TMPDIR"] = str(Path.cwd() / "tmp")
+    os.environ["TEMP"] = str(Path.cwd() / "tmp")
+    os.environ["TMP"] = str(Path.cwd() / "tmp")
+    os.makedirs(os.environ["TMPDIR"], exist_ok=True)
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 # Note: on utilise jiwer directement pour WER/CER
