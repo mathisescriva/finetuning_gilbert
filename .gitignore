@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data
+data/raw/
+data/processed/
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# Models
+outputs/models/
+*.bin
+*.safetensors
+*.onnx
+
+# Logs
+outputs/logs/
+*.log
+wandb/
+tensorboard/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# HuggingFace cache
+.cache/
+huggingface/

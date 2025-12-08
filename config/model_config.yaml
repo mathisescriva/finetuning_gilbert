@@ -1,0 +1,48 @@
+# Configuration du modèle de base
+base_model: "bofenghuang/whisper-large-v3-distil-fr-v0.2"
+reference_model: "openai/whisper-large-v3"  # Pour comparaison/teacher
+
+# Paramètres d'inférence par défaut
+inference:
+  chunk_length_s: 30
+  beam_size: 5
+  best_of: 5
+  temperature: 0.0
+  log_prob_threshold: -1.0
+  compression_ratio_threshold: 2.4
+  no_speech_threshold: 0.6
+  condition_on_previous_text: true
+  initial_prompt: null
+
+# Paramètres LoRA
+lora:
+  r: 16  # Rank
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:  # Modules du décodeur à adapter
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "out_proj"
+    - "fc1"
+    - "fc2"
+  bias: "none"
+  task_type: "FEATURE_EXTRACTION"
+
+# Paramètres de quantization
+quantization:
+  # Post-training quantization
+  ptq_int8: true
+  ptq_int4: false  # Optionnel, plus agressif
+  
+  # Quantization-aware training
+  qat_enabled: false
+  qat_num_calibration_steps: 1000
+
+# Distillation
+distillation:
+  enabled: false
+  teacher_model: "bofenghuang/whisper-large-v3-distil-fr-v0.2"
+  temperature: 2.0
+  alpha: 0.7  # Balance entre loss classique et distillation
+

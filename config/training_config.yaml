@@ -1,0 +1,111 @@
+# Configuration d'entraînement
+
+# Données
+data:
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  max_duration_seconds: 30
+  min_duration_seconds: 1
+  max_samples: null  # null = tout utiliser
+  
+  # Augmentations audio
+  augmentations:
+    enabled: true
+    noise:
+      enabled: true
+      min_snr_db: 5
+      max_snr_db: 15
+      noise_type: "office"  # office, white, pink, brown
+    
+    echo:
+      enabled: true
+      min_delay: 0.1
+      max_delay: 0.3
+      min_decay: 0.3
+      max_decay: 0.7
+    
+    speed:
+      enabled: false  # Peut déformer la parole
+    
+    volume:
+      enabled: true
+      min_gain_db: -6
+      max_gain_db: 6
+    
+    codec_compression:
+      enabled: true
+      codecs: ["mp3", "opus", "aac"]
+      bitrates: [64, 96, 128]
+
+# Hyperparamètres d'entraînement
+training:
+  # Phase 1: Fine-tuning full (encoder frozen initialement)
+  phase1:
+    freeze_encoder: true
+    num_epochs: 3
+    learning_rate: 1e-5
+    warmup_steps: 500
+    per_device_train_batch_size: 8
+    per_device_eval_batch_size: 16
+    gradient_accumulation_steps: 4
+    max_grad_norm: 1.0
+    weight_decay: 0.01
+    lr_scheduler_type: "cosine"
+    save_steps: 1000
+    eval_steps: 500
+    logging_steps: 100
+  
+  # Phase 2: Fine-tuning full (tout dégelé)
+  phase2:
+    freeze_encoder: false
+    num_epochs: 2
+    learning_rate: 5e-6
+    warmup_steps: 200
+    per_device_train_batch_size: 4  # Plus petit car plus de paramètres
+    per_device_eval_batch_size: 16
+    gradient_accumulation_steps: 8
+    max_grad_norm: 1.0
+    weight_decay: 0.01
+    lr_scheduler_type: "cosine"
+    save_steps: 500
+    eval_steps: 250
+    logging_steps: 50
+  
+  # Phase 3: LoRA fine-tuning (optionnel)
+  phase3_lora:
+    enabled: false
+    num_epochs: 5
+    learning_rate: 1e-4  # Plus élevé pour LoRA
+    warmup_steps: 100
+    per_device_train_batch_size: 16  # LoRA plus léger
+    per_device_eval_batch_size: 32
+    gradient_accumulation_steps: 2
+    max_grad_norm: 1.0
+    weight_decay: 0.01
+    lr_scheduler_type: "cosine"
+    save_steps: 200
+    eval_steps: 100
+    logging_steps: 50
+
+# Output
+output:
+  output_dir: "outputs/models"
+  logging_dir: "outputs/logs"
+  run_name: "whisper-meetings-finetune"
+  push_to_hub: false
+  hub_model_id: null
+  
+# Early stopping
+early_stopping:
+  patience: 3
+  metric: "wer"
+  mode: "min"
+
+# Mixed precision
+fp16: true
+bf16: false  # Si GPU supporte (A100, H100)
+
+# Seed pour reproductibilité
+seed: 42
+

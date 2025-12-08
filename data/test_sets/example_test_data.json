@@ -1,0 +1,29 @@
+{
+  "test_samples": [
+    {
+      "audio": "path/to/audio1.wav",
+      "text": "Bonjour à tous, bienvenue à cette réunion de comité technique. Je suis Jean Dupont, responsable du projet API."
+    },
+    {
+      "audio": "path/to/audio2.wav",
+      "text": "Nous devons discuter du budget pour le trimestre Q1. Les objectifs sont ambitieux."
+    },
+    {
+      "audio": "path/to/audio3.wav",
+      "text": "L'entreprise TechCorp souhaite collaborer avec nous sur le développement du produit."
+    }
+  ],
+  "entities": [
+    "Jean Dupont",
+    "TechCorp",
+    "API",
+    "Q1"
+  ],
+  "metadata": {
+    "description": "Jeu de test exemple pour évaluation baseline",
+    "num_samples": 3,
+    "language": "fr",
+    "domain": "meetings"
+  }
+}
+
