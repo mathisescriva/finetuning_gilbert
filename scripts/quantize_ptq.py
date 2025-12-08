@@ -23,6 +23,11 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
     print(f"💾 Modèle de sortie: {output_path}")
     print()
     
+    # Changer le cache HuggingFace vers /workspace (plus d'espace)
+    os.environ["HF_HOME"] = "/workspace/.hf_home"
+    os.environ["TRANSFORMERS_CACHE"] = "/workspace/.hf_home/hub"
+    os.environ["HF_DATASETS_CACHE"] = "/workspace/.hf_home/datasets"
+    
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     
