@@ -108,11 +108,29 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 continue
         
         # Copier les autres fichiers nécessaires (config, tokenizer, etc.)
+        # Mais sauter les fichiers .onnx_data qui sont très gros
         print("  Copie des fichiers de configuration...")
+        skipped = []
         for file in onnx_model_path.glob("*"):
-            if file.is_file() and file.suffix != ".onnx":
-                import shutil
-                shutil.copy2(file, quantized_path / file.name)
+            if file.is_file() and file.suffix != ".onnx" and not file.name.endswith(".onnx_data"):
+                try:
+                    import shutil
+                    shutil.copy2(file, quantized_path / file.name)
+                except OSError as e:
+                    if "No space" in str(e):
+                        skipped.append(file.name)
+                        print(f"    ⚠️  Espace insuffisant pour copier {file.name}, création lien symbolique...")
+                        try:
+                            (quantized_path / file.name).symlink_to(file)
+                        except:
+                            pass
+                    else:
+                        raise
+        
+        if skipped:
+            print(f"    ⚠️  {len(skipped)} fichiers non copiés (espace insuffisant), utilisent liens symboliques")
+        
+        # Les fichiers .onnx_data sont déjà référencés par les fichiers .onnx quantifiés si besoin
         
         # Sauvegarder aussi le processor
         processor.save_pretrained(str(quantized_path))
