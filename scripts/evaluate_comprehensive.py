@@ -18,7 +18,7 @@ from jiwer import wer, cer
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
-from evaluation.metrics import compute_wer, compute_cer, compute_entity_accuracy
+# Note: on utilise jiwer directement pour WER/CER
 
 
 def benchmark_inference(model, processor, audio_samples, device="cuda", batch_size=1):
