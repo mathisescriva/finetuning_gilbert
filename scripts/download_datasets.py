@@ -12,7 +12,7 @@ from tqdm import tqdm
 import os
 
 
-def download_common_voice_fr(output_dir: Path, splits: list = None):
+def download_common_voice_fr(output_dir: Path, splits: list = None, max_samples: int = None):
     """
     Télécharge Mozilla Common Voice français.
     Dataset généraliste de parole en français, très utile pour fine-tuning.
@@ -22,15 +22,86 @@ def download_common_voice_fr(output_dir: Path, splits: list = None):
     
     print("📥 Téléchargement de Mozilla Common Voice français...")
     
+    # Essayer différentes versions de Common Voice
+    versions_to_try = [
+        ("mozilla-foundation/common_voice_18_0", "fr"),
+        ("mozilla-foundation/common_voice_17_0", "fr"),
+        ("mozilla-foundation/common_voice_16_0", "fr"),
+        ("mozilla-foundation/common_voice_15_0", "fr"),
+        ("mozilla-foundation/common_voice_14_0", "fr"),
+        ("mozilla-foundation/common_voice_13_0", "fr"),
+    ]
+    
+    for version, lang in versions_to_try:
+        try:
+            print(f"  Tentative avec {version}...")
+            
+            # Charger le dataset
+            dataset = load_dataset(
+                version,
+                lang,
+                split="train+validation+test",
+                trust_remote_code=True,
+                streaming=False,  # Charger tout en mémoire
+            )
+            
+            # Limiter si demandé
+            if max_samples and len(dataset) > max_samples:
+                print(f"  Limitation à {max_samples} échantillons...")
+                dataset = dataset.select(range(max_samples))
+            
+            # Split en train/validation/test
+            train_val_test = dataset.train_test_split(test_size=0.2, seed=42)
+            val_test = train_val_test["test"].train_test_split(test_size=0.5, seed=42)
+            
+            dataset_dict = DatasetDict({
+                "train": train_val_test["train"],
+                "validation": val_test["train"],
+                "test": val_test["test"],
+            })
+            
+            # Filtrer colonnes et renommer
+            def process_example(example):
+                return {
+                    "audio": example["audio"],
+                    "text": example.get("sentence", example.get("text", "")),
+                }
+            
+            for split in splits:
+                if split in dataset_dict:
+                    dataset_dict[split] = dataset_dict[split].map(
+                        process_example,
+                        remove_columns=[col for col in dataset_dict[split].column_names if col not in ["audio", "text"]],
+                    )
+            
+            # Sauvegarder
+            output_path = output_dir / "common_voice_fr"
+            dataset_dict.save_to_disk(str(output_path))
+            print(f"✅ Common Voice FR ({version}) sauvegardé dans {output_path}")
+            print(f"   Train: {len(dataset_dict['train'])} échantillons")
+            print(f"   Validation: {len(dataset_dict['validation'])} échantillons")
+            print(f"   Test: {len(dataset_dict['test'])} échantillons")
+            
+            return dataset_dict
+            
+        except Exception as e:
+            print(f"  ❌ {version} échoué: {str(e)[:100]}")
+            continue
+    
+    # Si toutes les versions échouent, essayer sans langue spécifique
+    print("💡 Tentative avec dataset générique...")
     try:
-        dataset = load_dataset(
-            "mozilla-foundation/common_voice_17_0",
-            "fr",
-            split="train+validation+test",
-            trust_remote_code=True,
-        )
+        # Essayer avec le dataset le plus récent disponible
+        dataset = load_dataset("mozilla-foundation/common_voice_18_0", trust_remote_code=True)
+        if "fr" in dataset:
+            dataset = dataset["fr"]
+        else:
+            # Prendre le premier split disponible
+            dataset = list(dataset.values())[0]
         
-        # Split en train/validation/test
+        if max_samples and len(dataset) > max_samples:
+            dataset = dataset.select(range(max_samples))
+        
         train_val_test = dataset.train_test_split(test_size=0.2, seed=42)
         val_test = train_val_test["test"].train_test_split(test_size=0.5, seed=42)
         
@@ -40,11 +111,10 @@ def download_common_voice_fr(output_dir: Path, splits: list = None):
             "test": val_test["test"],
         })
         
-        # Filtrer colonnes et renommer
         def process_example(example):
             return {
                 "audio": example["audio"],
-                "text": example["sentence"],
+                "text": example.get("sentence", example.get("text", "")),
             }
         
         for split in splits:
@@ -54,39 +124,15 @@ def download_common_voice_fr(output_dir: Path, splits: list = None):
                     remove_columns=[col for col in dataset_dict[split].column_names if col not in ["audio", "text"]],
                 )
         
-        # Sauvegarder
         output_path = output_dir / "common_voice_fr"
         dataset_dict.save_to_disk(str(output_path))
         print(f"✅ Common Voice FR sauvegardé dans {output_path}")
-        
         return dataset_dict
         
     except Exception as e:
-        print(f"❌ Erreur lors du téléchargement de Common Voice: {e}")
-        print("💡 Tentative avec une version alternative...")
-        try:
-            # Alternative: common_voice_16_0
-            dataset = load_dataset("mozilla-foundation/common_voice_16_0", "fr")
-            dataset_dict = DatasetDict({
-                "train": dataset["train"],
-                "validation": dataset["validation"],
-                "test": dataset["test"],
-            })
-            
-            for split in splits:
-                if split in dataset_dict:
-                    dataset_dict[split] = dataset_dict[split].map(
-                        lambda x: {"audio": x["audio"], "text": x["sentence"]},
-                        remove_columns=[col for col in dataset_dict[split].column_names if col not in ["audio", "text"]],
-                    )
-            
-            output_path = output_dir / "common_voice_fr"
-            dataset_dict.save_to_disk(str(output_path))
-            print(f"✅ Common Voice FR (v16) sauvegardé dans {output_path}")
-            return dataset_dict
-        except Exception as e2:
-            print(f"❌ Erreur avec version alternative: {e2}")
-            return None
+        print(f"❌ Toutes les tentatives ont échoué: {e}")
+        print("💡 Essayez un autre dataset (MLS, VoxPopuli) ou téléchargez Common Voice manuellement")
+        return None
 
 
 def download_mls_french(output_dir: Path):
@@ -329,7 +375,7 @@ def main():
     
     # Télécharger datasets
     if "common_voice" in datasets_to_download:
-        downloaded_datasets["common_voice_fr"] = download_common_voice_fr(output_dir)
+        downloaded_datasets["common_voice_fr"] = download_common_voice_fr(output_dir, max_samples=args.max_samples)
     
     if "mls" in datasets_to_download:
         downloaded_datasets["mls_french"] = download_mls_french(output_dir)
