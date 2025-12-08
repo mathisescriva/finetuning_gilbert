@@ -16,7 +16,13 @@ print()
 
 try:
     print("📦 Chargement du modèle quantifié...")
-    model = ORTModelForSpeechSeq2Seq.from_pretrained(model_path)
+    # Charger sans cache (use_cache=False) car on n'a pas decoder_with_past_model.onnx
+    model = ORTModelForSpeechSeq2Seq.from_pretrained(
+        model_path,
+        encoder_file_name="encoder_model.onnx",
+        decoder_file_name="decoder_model.onnx",
+        use_cache=False,
+    )
     processor = AutoProcessor.from_pretrained(model_path)
     print("✅ Modèle chargé avec succès!")
     print()
