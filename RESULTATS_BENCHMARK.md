@@ -36,7 +36,7 @@
 | **Taille** | ~3.0 GB | 1.51 GB | **-50%** |
 | **Paramètres** | ~1.5B | 756.4M | **-49%** |
 | **Vitesse** | Baseline | **5.8x plus rapide** | **5.8x** |
-| **Qualité (WER)** | Référence | +1-2% WER | **Minimal** |
+| **Qualité (WER)** | Référence | +1-2% WER* | **Minimal** |
 
 ### Métriques Mesurées (Notre Benchmark)
 
@@ -61,9 +61,10 @@ Le modèle **Whisper-Large-V3-Distil-French-v0.2** offre un excellent compromis 
    - Latence < 0.1s pour 30s d'audio
 
 3. **Qualité**:
-   - Dégradation minimale (+1-2% WER selon documentation)
+   - Dégradation minimale (+1-2% WER selon documentation officielle*)
    - Spécialisé pour le français
    - Optimisé pour transcription longue durée
+   - *Note: WER non mesuré dans ce benchmark - valeurs de la documentation
 
 ### Points Clés pour le Papier
 
