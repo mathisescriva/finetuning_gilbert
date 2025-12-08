@@ -47,14 +47,17 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
     print(f"📊 Taille avant quantization: {sum(p.numel() * 4 for p in model.parameters()) / 1e9:.2f} GB (float32)")
     print()
     
-    # Exporter vers ONNX d'abord
-    print("🔄 Export ONNX...")
-    onnx_model_path = output_path / "onnx"
-    onnx_model_path.mkdir(exist_ok=True)
+    # Exporter et quantifier avec optimum (méthode simplifiée)
+    print("🔄 Export et Quantification ONNX...")
+    quantized_path = output_path / "quantized"
+    quantized_path.mkdir(exist_ok=True)
     
     try:
-        # Exporter avec optimum
-        print("  Exportation du modèle vers ONNX...")
+        # Méthode 1: Export ONNX puis quantifier avec optimum (gère multi-fichiers)
+        print("  Exportation ONNX avec quantization intégrée...")
+        
+        # Export ONNX standard
+        onnx_model_path = output_path / "onnx"
         onnx_model = ORTModelForSpeechSeq2Seq.from_pretrained(
             model_name_or_path,
             export=True,
@@ -63,65 +66,87 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         onnx_model.save_pretrained(str(onnx_model_path))
         print("  ✅ Export ONNX réussi")
         
-        # Quantifier
-        print("🔢 Quantification int8...")
-        quantizer = ORTQuantizer.from_pretrained(onnx_model_path)
+        # Quantifier chaque composant séparément (encoder, decoder)
+        print("🔢 Quantification int8 (multi-fichiers)...")
         
-        # Configuration quantization dynamic (pas besoin de calibration data)
+        # Configuration quantization
         qconfig = AutoQuantizationConfig.avx512_vnni(is_static=False)
         
-        print("  Application de la quantization...")
-        quantizer.quantize(
-            save_dir=str(output_path / "quantized"),
-            quantization_config=qconfig,
-        )
+        # Lister les fichiers ONNX
+        onnx_files = list(onnx_model_path.glob("*.onnx"))
+        print(f"  Trouvé {len(onnx_files)} fichiers ONNX à quantifier")
+        
+        # Quantifier chaque fichier
+        quantized_files = {}
+        for onnx_file in onnx_files:
+            try:
+                print(f"  Quantification de {onnx_file.name}...")
+                quantizer = ORTQuantizer.from_pretrained(str(onnx_model_path), file_name=onnx_file.name)
+                
+                # Créer répertoire temporaire pour ce fichier
+                temp_quant_dir = output_path / f"temp_quant_{onnx_file.stem}"
+                temp_quant_dir.mkdir(exist_ok=True)
+                
+                quantizer.quantize(
+                    save_dir=str(temp_quant_dir),
+                    quantization_config=qconfig,
+                )
+                
+                # Déplacer le fichier quantifié
+                quantized_file = list(temp_quant_dir.glob("*.onnx"))[0]
+                target_file = quantized_path / quantized_file.name
+                quantized_file.rename(target_file)
+                quantized_files[onnx_file.name] = target_file.name
+                
+                # Nettoyer
+                import shutil
+                shutil.rmtree(temp_quant_dir)
+                print(f"    ✅ {onnx_file.name} quantifié")
+                
+            except Exception as e_file:
+                print(f"    ⚠️  Erreur pour {onnx_file.name}: {e_file}")
+                continue
+        
+        # Copier les autres fichiers nécessaires (config, tokenizer, etc.)
+        print("  Copie des fichiers de configuration...")
+        for file in onnx_model_path.glob("*"):
+            if file.is_file() and file.suffix != ".onnx":
+                import shutil
+                shutil.copy2(file, quantized_path / file.name)
+        
+        # Sauvegarder aussi le processor
+        processor.save_pretrained(str(quantized_path))
         
         print()
         print("✅ ✅ ✅ QUANTIZATION TERMINÉE! ✅ ✅ ✅")
-        print(f"📁 Modèle quantifié dans: {output_path / 'quantized'}")
+        print(f"📁 Modèle quantifié dans: {quantized_path}")
         print()
         print("💡 Utilisation:")
         print(f"   from optimum.onnxruntime import ORTModelForSpeechSeq2Seq")
-        print(f"   model = ORTModelForSpeechSeq2Seq.from_pretrained('{output_path / 'quantized'}')")
+        print(f"   model = ORTModelForSpeechSeq2Seq.from_pretrained('{quantized_path}')")
         print()
         
         # Estimation taille
-        if (output_path / "quantized").exists():
+        if quantized_path.exists():
             total_size = sum(
                 f.stat().st_size 
-                for f in (output_path / "quantized").rglob("*") 
+                for f in quantized_path.rglob("*") 
                 if f.is_file()
             ) / 1e9
             original_size = sum(p.numel() * 4 for p in model.parameters()) / 1e9
-            reduction = (1 - total_size / original_size) * 100
+            reduction = (1 - total_size / original_size) * 100 if original_size > 0 else 0
             print(f"📊 Taille après quantization: ~{total_size:.2f} GB (int8)")
+            print(f"📊 Taille originale: ~{original_size:.2f} GB (float32)")
             print(f"💾 Réduction: ~{reduction:.1f}%")
         
     except Exception as e:
         print(f"❌ Erreur lors de l'export/quantization: {e}")
+        import traceback
+        traceback.print_exc()
         print()
-        print("💡 Alternative: Quantization PyTorch native (moins optimisé mais plus simple)")
-        
-        # Alternative: quantization PyTorch native
-        try:
-            print("\n🔄 Tentative avec quantization PyTorch native...")
-            model_quantized = torch.quantization.quantize_dynamic(
-                model,
-                {torch.nn.Linear},
-                dtype=torch.qint8
-            )
-            
-            quantized_path = output_path / "quantized_pytorch"
-            quantized_path.mkdir(exist_ok=True)
-            model_quantized.save_pretrained(str(quantized_path))
-            processor.save_pretrained(str(quantized_path))
-            
-            print(f"✅ Modèle quantifié PyTorch sauvegardé dans: {quantized_path}")
-            print("   (Moins optimisé que ONNX mais fonctionne)")
-            
-        except Exception as e2:
-            print(f"❌ Erreur avec PyTorch quantization: {e2}")
-            raise
+        print("💡 Le modèle ONNX a été exporté dans:", onnx_model_path)
+        print("   Vous pouvez l'utiliser directement ou quantifier manuellement.")
+        raise
 
 
 def main():
