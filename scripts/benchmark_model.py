@@ -18,7 +18,10 @@ def benchmark_model(model, processor, device="cuda", num_runs=5):
     # Créer des features audio dummy (30 secondes à 16kHz)
     dummy_audio = np.random.randn(480000).astype(np.float32)  # 30s * 16000 Hz
     inputs = processor(dummy_audio, sampling_rate=16000, return_tensors="pt")
-    inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+    
+    # Convertir au bon dtype (même que le modèle)
+    model_dtype = next(model.parameters()).dtype if hasattr(model, 'parameters') and next(model.parameters(), None) is not None else torch.float16
+    inputs = {k: v.to(device).to(model_dtype) if isinstance(v, torch.Tensor) and v.dtype.is_floating_point else v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
     
     # Warmup
     with torch.no_grad():
@@ -143,10 +146,9 @@ def main():
         # Mémoire GPU
         if args.device == "cuda":
             torch.cuda.reset_peak_memory_stats()
-            _ = model.generate(
-                processor(np.random.randn(48000), sampling_rate=16000, return_tensors="pt").to(args.device),
-                max_length=50
-            )
+            test_inputs = processor(np.random.randn(48000), sampling_rate=16000, return_tensors="pt")
+            test_inputs = {k: v.to(args.device).to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype.is_floating_point else v.to(args.device) if isinstance(v, torch.Tensor) else v for k, v in test_inputs.items()}
+            _ = model.generate(**test_inputs, max_length=50)
             peak_memory = torch.cuda.max_memory_allocated() / 1e9
             print(f"   Mémoire VRAM max: {peak_memory:.2f} GB")
         
