@@ -62,19 +62,33 @@ def benchmark_inference(model, processor, audio_samples, device="cuda", batch_si
         torch.cuda.reset_peak_memory_stats()
         initial_memory = torch.cuda.memory_allocated() / 1e9
     
-    # Traiter par batch
+        # Traiter par batch
     for i in tqdm(range(0, len(audio_samples), batch_size), desc="Benchmark vitesse"):
         batch = audio_samples[i:i+batch_size]
         
         # Préparer inputs
         inputs_list = []
         for audio in batch:
+            # Extraire audio array et sampling rate
             if isinstance(audio, dict):
-                audio_array = audio.get("array", audio.get("audio"))
-                sr = audio.get("sampling_rate", 16000)
+                if "audio" in audio and isinstance(audio["audio"], dict):
+                    audio_array = audio["audio"].get("array", None)
+                    sr = audio["audio"].get("sampling_rate", 16000)
+                else:
+                    audio_array = audio.get("array", audio.get("audio"))
+                    sr = audio.get("sampling_rate", 16000)
             else:
                 audio_array = audio
                 sr = 16000
+            
+            # S'assurer qu'on a un array numpy
+            if audio_array is None:
+                continue
+            
+            # Convertir en numpy array si nécessaire
+            if not isinstance(audio_array, np.ndarray):
+                import numpy as np
+                audio_array = np.array(audio_array, dtype=np.float32)
             
             inputs = processor(audio_array, sampling_rate=sr, return_tensors="pt")
             inputs_list.append(inputs)
@@ -130,15 +144,31 @@ def evaluate_quality(model, processor, dataset, device="cuda", max_samples=None)
     samples = dataset.select(range(min(max_samples, len(dataset)))) if max_samples else dataset
     
     for sample in tqdm(samples, desc="Évaluation qualité"):
-        # Audio
-        audio = sample.get("audio", {})
-        audio_array = audio.get("array", sample.get("audio"))
-        sr = audio.get("sampling_rate", 16000)
+        # Audio - gérer différents formats
+        if isinstance(sample, dict):
+            audio = sample.get("audio", {})
+            if isinstance(audio, dict):
+                audio_array = audio.get("array", None)
+                sr = audio.get("sampling_rate", 16000)
+            else:
+                audio_array = audio
+                sr = 16000
+        else:
+            audio_array = sample
+            sr = 16000
         
         # Référence
         reference = sample.get("text", sample.get("sentence", ""))
         if not reference:
             continue
+        
+        # S'assurer qu'on a un array numpy
+        if audio_array is None:
+            continue
+        
+        # Convertir en numpy array si nécessaire
+        if not isinstance(audio_array, np.ndarray):
+            audio_array = np.array(audio_array, dtype=np.float32)
         
         # Transcription
         inputs = processor(audio_array, sampling_rate=sr, return_tensors="pt")
@@ -267,12 +297,14 @@ def main():
     if not test_datasets:
         print("❌ Aucun dataset de test disponible")
         print("💡 Création d'un dataset minimal pour test...")
-        # Créer dataset minimal
-        dummy_dataset = Dataset.from_dict({
-            "audio": [{"array": np.random.randn(16000).astype(np.float32), "sampling_rate": 16000}],
-            "text": ["Test de transcription en français"],
-        })
-        test_datasets = {"dummy": dummy_dataset}
+        # Créer dataset minimal pour benchmark vitesse seulement
+    # Note: Pour qualité (WER/CER), il faut un vrai dataset avec transcripts
+    dummy_audio = np.random.randn(16000).astype(np.float32)
+    dummy_samples = [{
+        "audio": {"array": dummy_audio, "sampling_rate": 16000},
+        "text": "Test de transcription"
+    }]
+    test_datasets = {"dummy_benchmark": dummy_samples}
     
     # Évaluer modèle principal
     print(f"🔍 Évaluation du modèle: {args.model}")
