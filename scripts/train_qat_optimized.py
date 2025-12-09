@@ -223,72 +223,65 @@ def main():
         if args.max_samples and len(train_dataset) > args.max_samples:
             train_dataset = train_dataset.select(range(args.max_samples))
     else:
-        # HuggingFace dataset - Support MLS format
-        try:
-            # Essayer de charger avec config (pour MLS: facebook/multilingual_librispeech + french)
-            if "multilingual_librispeech" in args.train_data:
-                print(f"   Chargement MLS français (streaming pour économiser espace)...")
-                # Utiliser streaming pour éviter de remplir le disque
-                dataset_stream = load_dataset(
-                    args.train_data, 
-                    "french", 
-                    split="train", 
-                    streaming=True
-                )
-                # Convertir en dataset normal avec limitation immédiate
-                print(f"   Conversion streaming → dataset (limité à {args.max_samples or 60000} échantillons)...")
-                from datasets import Dataset
-                dataset_list = []
-                for i, item in enumerate(dataset_stream):
-                    if args.max_samples and i >= args.max_samples:
-                        break
-                    dataset_list.append(item)
-                    if (i + 1) % 1000 == 0:
-                        print(f"      Chargé {i + 1} échantillons...")
-                dataset_full = Dataset.from_list(dataset_list)
-                print(f"   ✅ {len(dataset_full)} échantillons chargés")
-            else:
-                dataset_full = load_dataset(args.train_data, split="train", streaming=False)
-        except Exception as e:
-            print(f"⚠️  Erreur chargement dataset: {e}")
-            print(f"   Tentative avec streaming=True (économise espace disque)...")
-            # Utiliser streaming pour éviter de télécharger tout le dataset
-            dataset_full = load_dataset(
+        # HuggingFace dataset - Utiliser streaming natif avec Trainer
+        print(f"   Chargement dataset en streaming (pas de chargement complet en mémoire)...")
+        
+        # Charger en streaming (IterableDataset)
+        if "multilingual_librispeech" in args.train_data:
+            train_dataset_stream = load_dataset(
                 args.train_data, 
-                "french" if "multilingual_librispeech" in args.train_data else None,
+                "french", 
                 split="train", 
                 streaming=True
             )
-            # Convertir en dataset normal avec limitation
-            print(f"   Chargement avec streaming (limité à {args.max_samples} échantillons)...")
-            dataset_list = []
-            for i, item in enumerate(dataset_full):
-                if args.max_samples and i >= args.max_samples:
-                    break
-                dataset_list.append(item)
-            from datasets import Dataset
-            dataset_full = Dataset.from_list(dataset_list)
+            eval_dataset_stream = load_dataset(
+                args.eval_data,
+                "french",
+                split="dev",
+                streaming=True
+            )
+        else:
+            train_dataset_stream = load_dataset(args.train_data, split="train", streaming=True)
+            eval_dataset_stream = load_dataset(args.eval_data, split="validation", streaming=True)
         
-        if args.max_samples and len(dataset_full) > args.max_samples:
-            print(f"   Limitation à {args.max_samples} échantillons")
-            dataset_full = dataset_full.select(range(args.max_samples))
+        # Limiter le streaming avec take()
+        if args.max_samples:
+            train_dataset_stream = train_dataset_stream.take(args.max_samples)
+            # Limiter eval à 1000 max
+            eval_dataset_stream = eval_dataset_stream.take(min(1000, args.max_samples // 10))
         
-        # Utiliser prepare_dataset pour transformation
+        print(f"   ✅ Dataset en streaming configuré (chargement batch par batch)")
+        print(f"   Le Trainer gérera automatiquement le streaming")
+        
+        # Convertir en dataset normal avec prepare_dataset pour transformation
+        # Mais utiliser directement le streaming si prepare_dataset ne fonctionne pas
+        use_streaming_direct = True
         try:
+            # Essayer prepare_dataset mais avec streaming
+            from src.data.dataset import prepare_dataset
             train_dataset = prepare_dataset(
                 args.train_data,
                 processor,
                 split="train",
                 augmentations=create_augmentation_pipeline({}),
+                streaming=True,
             )
-            if hasattr(train_dataset, 'dataset') and len(train_dataset.dataset) > args.max_samples:
-                train_dataset.dataset = train_dataset.dataset.select(range(args.max_samples))
+            # Appliquer limitation
+            if args.max_samples and hasattr(train_dataset, 'take'):
+                train_dataset = train_dataset.take(args.max_samples)
+            use_streaming_direct = False
         except Exception as e:
-            print(f"⚠️  prepare_dataset échoué, utilisation dataset brut: {e}")
-            # Fallback: utiliser dataset directement
-            train_dataset = dataset_full
+            print(f"⚠️  prepare_dataset streaming échoué: {e}")
+            print(f"   Utilisation streaming direct avec transformations minimales")
+        
+        if use_streaming_direct:
+            # Utiliser le streaming directement - Trainer peut le gérer
+            dataset_full = train_dataset_stream
+        
+            # Utiliser dataset streaming directement
+            train_dataset = train_dataset_stream
     
-    # Eval dataset (même logique)
+    # Eval dataset - utiliser streaming aussi
     if args.eval_data.endswith('.json'):
         with open(args.eval_data, 'r') as f:
             eval_data = json.load(f)
@@ -302,48 +295,36 @@ def main():
             augmentations=None,
         )
     else:
-        try:
-            # Essayer split validation, sinon dev (pour MLS)
-            try:
-                if "multilingual_librispeech" in args.eval_data:
-                    eval_dataset_raw = load_dataset(
-                        args.eval_data, 
-                        "french", 
-                        split="dev", 
-                        streaming=False
-                    )
-                else:
-                    eval_dataset_raw = load_dataset(args.eval_data, split="validation", streaming=False)
-            except:
-                eval_dataset_raw = load_dataset(args.eval_data, split="dev", streaming=False)
-            
-            # Limiter taille eval
-            if len(eval_dataset_raw) > 1000:
-                eval_dataset_raw = eval_dataset_raw.select(range(1000))
-            
-            # Utiliser prepare_dataset si possible
+        # Utiliser eval dataset streaming
+        if use_streaming_direct:
+            eval_dataset = eval_dataset_stream
+        else:
             try:
                 eval_dataset = prepare_dataset(
                     args.eval_data,
                     processor,
                     split="dev" if "multilingual_librispeech" in args.eval_data else "validation",
                     augmentations=None,
+                    streaming=True,
                 )
-                if hasattr(eval_dataset, 'dataset') and len(eval_dataset.dataset) > 1000:
-                    eval_dataset.dataset = eval_dataset.dataset.select(range(1000))
-            except Exception as e:
-                print(f"⚠️  prepare_dataset eval échoué, utilisation dataset brut: {e}")
-                eval_dataset = eval_dataset_raw
-        except Exception as e:
-            print(f"⚠️  Erreur chargement eval dataset: {e}")
-            # Utiliser un sous-ensemble du train comme eval
-            print("   Utilisation sous-ensemble train comme eval")
-            eval_dataset = dataset_full.select(range(min(1000, len(dataset_full))))
+                eval_dataset = eval_dataset.take(min(1000, args.max_samples // 10) if args.max_samples else 1000)
+            except:
+                eval_dataset = eval_dataset_stream
     
     # Data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
     
     # Arguments d'entraînement optimisés
+    # Pour streaming, on doit utiliser max_steps au lieu de num_epochs
+    is_streaming = isinstance(train_dataset, type(load_dataset("dummy", split="train", streaming=True)))
+    
+    if is_streaming:
+        # Avec streaming, calculer max_steps approximatif
+        # 60000 samples / batch_size 16 / gradient_accumulation 2 = ~1875 steps par epoch
+        steps_per_epoch = (args.max_samples or 60000) // (args.per_device_batch_size * args.gradient_accumulation_steps)
+        max_steps = steps_per_epoch * args.num_epochs
+        print(f"   Mode streaming: ~{steps_per_epoch} steps/epoch, {max_steps} steps total")
+    
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_batch_size,
@@ -351,14 +332,15 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
         warmup_steps=200,
-        num_train_epochs=args.num_epochs,
+        num_train_epochs=args.num_epochs if not is_streaming else None,
+        max_steps=max_steps if is_streaming else None,
         evaluation_strategy="steps",
-        eval_steps=1000,
+        eval_steps=1000 if not is_streaming else steps_per_epoch // 2,  # Eval moins souvent en streaming
         save_strategy="steps",
-        save_steps=2000,
+        save_steps=2000 if not is_streaming else steps_per_epoch,  # Sauvegarder à chaque epoch
         logging_steps=50,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_wer",
+        load_best_model_at_end=not is_streaming,  # Pas de best model avec streaming
+        metric_for_best_model="eval_wer" if not is_streaming else None,
         greater_is_better=False,
         push_to_hub=False,
         report_to=["tensorboard"],
@@ -368,7 +350,7 @@ def main():
         weight_decay=0.01,
         max_grad_norm=1.0,
         seed=42,
-        dataloader_num_workers=4,
+        dataloader_num_workers=2 if is_streaming else 4,  # Moins de workers en streaming
         remove_unused_columns=False,
     )
     
