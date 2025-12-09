@@ -223,21 +223,42 @@ def main():
         if args.max_samples and len(train_dataset) > args.max_samples:
             train_dataset = train_dataset.select(range(args.max_samples))
     else:
-        # HuggingFace dataset
-        dataset_full = load_dataset(args.train_data, split="train", streaming=False)
+        # HuggingFace dataset - Support MLS format
+        try:
+            # Essayer de charger avec config (pour MLS: facebook/multilingual_librispeech + french)
+            if "multilingual_librispeech" in args.train_data:
+                print(f"   Chargement MLS français...")
+                dataset_full = load_dataset(
+                    args.train_data, 
+                    "french", 
+                    split="train", 
+                    streaming=False
+                )
+            else:
+                dataset_full = load_dataset(args.train_data, split="train", streaming=False)
+        except Exception as e:
+            print(f"⚠️  Erreur chargement dataset: {e}")
+            print(f"   Tentative avec split='train' uniquement...")
+            dataset_full = load_dataset(args.train_data, split="train", streaming=False)
         
         if args.max_samples and len(dataset_full) > args.max_samples:
             print(f"   Limitation à {args.max_samples} échantillons")
             dataset_full = dataset_full.select(range(args.max_samples))
         
-        train_dataset = prepare_dataset(
-            args.train_data,
-            processor,
-            split="train",
-            augmentations=create_augmentation_pipeline({}),
-        )
-        if hasattr(train_dataset, 'dataset') and len(train_dataset.dataset) > args.max_samples:
-            train_dataset.dataset = train_dataset.dataset.select(range(args.max_samples))
+        # Utiliser prepare_dataset pour transformation
+        try:
+            train_dataset = prepare_dataset(
+                args.train_data,
+                processor,
+                split="train",
+                augmentations=create_augmentation_pipeline({}),
+            )
+            if hasattr(train_dataset, 'dataset') and len(train_dataset.dataset) > args.max_samples:
+                train_dataset.dataset = train_dataset.dataset.select(range(args.max_samples))
+        except Exception as e:
+            print(f"⚠️  prepare_dataset échoué, utilisation dataset brut: {e}")
+            # Fallback: utiliser dataset directement
+            train_dataset = dataset_full
     
     # Eval dataset (même logique)
     if args.eval_data.endswith('.json'):
@@ -253,14 +274,43 @@ def main():
             augmentations=None,
         )
     else:
-        eval_dataset = prepare_dataset(
-            args.eval_data,
-            processor,
-            split="validation",
-            augmentations=None,
-        )
-        if hasattr(eval_dataset, 'dataset') and len(eval_dataset.dataset) > 1000:
-            eval_dataset.dataset = eval_dataset.dataset.select(range(1000))
+        try:
+            # Essayer split validation, sinon dev (pour MLS)
+            try:
+                if "multilingual_librispeech" in args.eval_data:
+                    eval_dataset_raw = load_dataset(
+                        args.eval_data, 
+                        "french", 
+                        split="dev", 
+                        streaming=False
+                    )
+                else:
+                    eval_dataset_raw = load_dataset(args.eval_data, split="validation", streaming=False)
+            except:
+                eval_dataset_raw = load_dataset(args.eval_data, split="dev", streaming=False)
+            
+            # Limiter taille eval
+            if len(eval_dataset_raw) > 1000:
+                eval_dataset_raw = eval_dataset_raw.select(range(1000))
+            
+            # Utiliser prepare_dataset si possible
+            try:
+                eval_dataset = prepare_dataset(
+                    args.eval_data,
+                    processor,
+                    split="dev" if "multilingual_librispeech" in args.eval_data else "validation",
+                    augmentations=None,
+                )
+                if hasattr(eval_dataset, 'dataset') and len(eval_dataset.dataset) > 1000:
+                    eval_dataset.dataset = eval_dataset.dataset.select(range(1000))
+            except Exception as e:
+                print(f"⚠️  prepare_dataset eval échoué, utilisation dataset brut: {e}")
+                eval_dataset = eval_dataset_raw
+        except Exception as e:
+            print(f"⚠️  Erreur chargement eval dataset: {e}")
+            # Utiliser un sous-ensemble du train comme eval
+            print("   Utilisation sous-ensemble train comme eval")
+            eval_dataset = dataset_full.select(range(min(1000, len(dataset_full))))
     
     # Data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)

@@ -64,10 +64,16 @@ if [ -f "data/train.json" ]; then
     EVAL_DATA="data/train.json"  # Utiliser même fichier pour eval (ou créer data/eval.json)
     echo "✅ Utilisation dataset local: $TRAIN_DATA"
 else
-    # Utiliser HuggingFace dataset
-    TRAIN_DATA="mozilla-foundation/common_voice_13_0"
-    EVAL_DATA="mozilla-foundation/common_voice_13_0"
-    echo "✅ Utilisation dataset HuggingFace: $TRAIN_DATA"
+    # Utiliser MLS (Multilingual LibriSpeech) - plus stable que Common Voice
+    TRAIN_DATA="facebook/multilingual_librispeech"
+    EVAL_DATA="facebook/multilingual_librispeech"
+    TRAIN_DATA_CONFIG="french"
+    EVAL_DATA_CONFIG="french"
+    TRAIN_DATA_SPLIT="train"
+    EVAL_DATA_SPLIT="dev"
+    echo "✅ Utilisation dataset HuggingFace: $TRAIN_DATA (french)"
+    echo "   Split train: $TRAIN_DATA_SPLIT"
+    echo "   Split eval: $EVAL_DATA_SPLIT"
 fi
 
 # Créer répertoire de sortie
@@ -84,17 +90,33 @@ echo "   Batch size: ${BATCH_SIZE}"
 echo ""
 
 # Lancer entraînement
-python scripts/train_qat_optimized.py \
-    --base_model "${BASE_MODEL}" \
-    --train_data "${TRAIN_DATA}" \
-    --eval_data "${EVAL_DATA}" \
-    --quantization_type "${QUANT_TYPE}" \
-    --output_dir "${OUTPUT_DIR}" \
-    --num_epochs ${NUM_EPOCHS} \
-    --max_samples ${MAX_SAMPLES} \
-    --per_device_batch_size ${BATCH_SIZE} \
-    --learning_rate ${LEARNING_RATE} \
-    2>&1 | tee "${OUTPUT_DIR}/training.log"
+if [ -f "data/train.json" ]; then
+    # Dataset local
+    python scripts/train_qat_optimized.py \
+        --base_model "${BASE_MODEL}" \
+        --train_data "${TRAIN_DATA}" \
+        --eval_data "${EVAL_DATA}" \
+        --quantization_type "${QUANT_TYPE}" \
+        --output_dir "${OUTPUT_DIR}" \
+        --num_epochs ${NUM_EPOCHS} \
+        --max_samples ${MAX_SAMPLES} \
+        --per_device_batch_size ${BATCH_SIZE} \
+        --learning_rate ${LEARNING_RATE} \
+        2>&1 | tee "${OUTPUT_DIR}/training.log"
+else
+    # Dataset HuggingFace (MLS)
+    python scripts/train_qat_optimized.py \
+        --base_model "${BASE_MODEL}" \
+        --train_data "${TRAIN_DATA}" \
+        --eval_data "${EVAL_DATA}" \
+        --quantization_type "${QUANT_TYPE}" \
+        --output_dir "${OUTPUT_DIR}" \
+        --num_epochs ${NUM_EPOCHS} \
+        --max_samples ${MAX_SAMPLES} \
+        --per_device_batch_size ${BATCH_SIZE} \
+        --learning_rate ${LEARNING_RATE} \
+        2>&1 | tee "${OUTPUT_DIR}/training.log"
+fi
 
 echo ""
 echo "✅ Entraînement terminé !"
