@@ -92,34 +92,21 @@ echo "   Époques: ${NUM_EPOCHS}"
 echo "   Batch size: ${BATCH_SIZE}"
 echo ""
 
-# Lancer entraînement
-if [ -f "data/train.json" ]; then
-    # Dataset local
-    python scripts/train_qat_optimized.py \
-        --base_model "${BASE_MODEL}" \
-        --train_data "${TRAIN_DATA}" \
-        --eval_data "${EVAL_DATA}" \
-        --quantization_type "${QUANT_TYPE}" \
-        --output_dir "${OUTPUT_DIR}" \
-        --num_epochs ${NUM_EPOCHS} \
-        --max_samples ${MAX_SAMPLES} \
-        --per_device_batch_size ${BATCH_SIZE} \
-        --learning_rate ${LEARNING_RATE} \
-        2>&1 | tee "${OUTPUT_DIR}/training.log"
-else
-    # Dataset HuggingFace (MLS)
-    python scripts/train_qat_optimized.py \
-        --base_model "${BASE_MODEL}" \
-        --train_data "${TRAIN_DATA}" \
-        --eval_data "${EVAL_DATA}" \
-        --quantization_type "${QUANT_TYPE}" \
-        --output_dir "${OUTPUT_DIR}" \
-        --num_epochs ${NUM_EPOCHS} \
-        --max_samples ${MAX_SAMPLES} \
-        --per_device_batch_size ${BATCH_SIZE} \
-        --learning_rate ${LEARNING_RATE} \
-        2>&1 | tee "${OUTPUT_DIR}/training.log"
-fi
+# Lancer entraînement avec script simplifié (plus robuste)
+echo "💡 Utilisation script simplifié (train_qat_simple.py)"
+echo "   Pas de streaming complexe, dataset limité chargé en mémoire"
+
+# Réduire max_samples pour éviter problèmes mémoire
+MAX_SAMPLES_SIMPLE=10000  # 10k au lieu de 60k pour éviter problèmes RAM
+
+python scripts/train_qat_simple.py \
+    --base_model "${BASE_MODEL}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --max_samples ${MAX_SAMPLES_SIMPLE} \
+    --num_epochs ${NUM_EPOCHS} \
+    --batch_size ${BATCH_SIZE} \
+    --learning_rate ${LEARNING_RATE} \
+    2>&1 | tee "${OUTPUT_DIR}/training.log"
 
 echo ""
 echo "✅ Entraînement terminé !"
