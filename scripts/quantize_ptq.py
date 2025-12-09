@@ -103,15 +103,17 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         # Copier le modèle ONNX directement (déjà optimisé, plus rapide que PyTorch)
         print("📦 Copie modèle ONNX optimisé...")
         for file in onnx_model_path.glob("*"):
-            if file.is_file() and file.suffix in [".onnx", ".json", ".txt"]:
-                # Ne pas copier les .onnx_data (très volumineux)
-                if not file.name.endswith(".onnx_data"):
-                    try:
-                        shutil.copy2(file, quantized_path / file.name)
-                    except Exception as e:
-                        print(f"    ⚠️  Erreur copie {file.name}: {e}")
+            if file.is_file():
+                # Copier tous les fichiers nécessaires (y compris .onnx_data)
+                try:
+                    shutil.copy2(file, quantized_path / file.name)
+                    if file.name.endswith(".onnx_data"):
+                        size_mb = file.stat().st_size / 1e6
+                        print(f"    Copié: {file.name} ({size_mb:.0f} MB)")
+                except Exception as e:
+                    print(f"    ⚠️  Erreur copie {file.name}: {e}")
         
-        print("  ✅ Modèle ONNX copié")
+        print("  ✅ Modèle ONNX copié (avec fichiers .onnx_data)")
         
         # Note: La quantization statique avec ConvInteger n'est pas supportée par ONNX Runtime standard
         # Le modèle ONNX non quantifié est déjà optimisé et plus rapide que PyTorch
@@ -154,17 +156,9 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 print(f"💾 Taille similaire: ~{abs(change):.1f}% différence")
             print(f"⚡ Vitesse: ~2-3x plus rapide que PyTorch (ONNX Runtime optimisé)")
         
-        # Nettoyer fichiers ONNX non quantifiés APRÈS quantification réussie
+        # Ne pas supprimer les .onnx_data - ils sont nécessaires pour le modèle
         print()
-        print("  🧹 Nettoyage fichiers temporaires...")
-        for onnx_data_file in onnx_model_path.glob("*.onnx_data"):
-            try:
-                onnx_data_file.unlink()
-                print(f"    Supprimé: {onnx_data_file.name}")
-            except:
-                pass
-        # Garder les .onnx originaux pour référence (petits fichiers)
-        print("  ✅ Nettoyage terminé")
+        print("  ✅ Modèle ONNX complet copié (fichiers .onnx_data conservés)")
         
     except Exception as e:
         print(f"❌ Erreur lors de l'export/quantization: {e}")
