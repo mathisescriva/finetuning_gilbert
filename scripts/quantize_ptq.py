@@ -89,7 +89,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 print("  ⚠️  Modèle ONNX existe mais fichiers .onnx_data manquants")
                 print("  🔄 Ré-export nécessaire...")
                 # Supprimer l'ancien pour forcer la ré-export
-                import shutil
                 if onnx_model_path.exists():
                     shutil.rmtree(onnx_model_path)
                 onnx_model_path.mkdir(exist_ok=True)
