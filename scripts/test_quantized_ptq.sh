@@ -13,13 +13,13 @@ cd /workspace/finetuning_gilbert
 
 # 1. Test de chargement
 echo "📦 Test de chargement..."
-python << 'PYEOF'
+python << PYEOF
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 from transformers import AutoProcessor
 from pathlib import Path
 import numpy as np
 
-model_path = "outputs/models/gilbert-whisper-ptq-int8/quantized"
+model_path = "$MODEL_PATH"
 
 print(f"Chargement depuis: {model_path}")
 
