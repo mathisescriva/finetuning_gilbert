@@ -101,6 +101,14 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
             onnx_model.save_pretrained(str(onnx_model_path))
             print("  ✅ Export ONNX réussi (avec fichiers .onnx_data)")
         
+        # Sauvegarder le processor dans le répertoire onnx (nécessaire pour utilisation)
+        print("📦 Sauvegarde configuration (processor, tokenizer)...")
+        try:
+            processor.save_pretrained(str(onnx_model_path))
+            print("  ✅ Configuration sauvegardée")
+        except Exception as e:
+            print(f"  ⚠️  Erreur sauvegarde configuration: {e}")
+        
         # Libérer mémoire PyTorch
         print("  🧹 Libération mémoire PyTorch...")
         del model
@@ -123,9 +131,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         print("  ⚠️  Quantification statique avec ConvInteger non supportée")
         print("  ✅ Utilisation modèle ONNX optimisé (déjà plus rapide que PyTorch)")
         print("  💡 Pour quantization runtime: utiliser ORTQuantizer à l'exécution")
-        
-        # Sauvegarder aussi le processor
-        processor.save_pretrained(str(quantized_path))
         
         print()
         print("✅ ✅ ✅ EXPORT ONNX TERMINÉ! ✅ ✅ ✅")
