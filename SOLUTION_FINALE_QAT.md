@@ -44,8 +44,7 @@ cd /workspace/finetuning_gilbert
 # Quantifier directement (pas besoin d'entraînement ni de dataset)
 python scripts/quantize_ptq.py \
   --model bofenghuang/whisper-large-v3-distil-fr-v0.2 \
-  --quantization_type int8 \
-  --output_dir outputs/models/gilbert-whisper-ptq-int8
+  --output outputs/models/gilbert-whisper-ptq-int8
 ```
 
 **Résultat** :
