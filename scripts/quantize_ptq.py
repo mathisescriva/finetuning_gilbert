@@ -186,9 +186,14 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 if f.is_file()
             ) / 1e9
             reduction = (1 - total_size / original_size) * 100 if original_size > 0 else 0
-            print(f"📊 Taille après quantization: ~{total_size:.2f} GB (int8)")
+            print(f"📊 Taille après quantization: ~{total_size:.2f} GB (int8 QDQ)")
             print(f"📊 Taille originale: ~{original_size:.2f} GB (float32)")
-            print(f"💾 Réduction: ~{reduction:.1f}%")
+            if reduction > 0:
+                print(f"💾 Réduction: ~{reduction:.1f}%")
+            else:
+                change = ((total_size - original_size) / original_size) * 100
+                print(f"💾 Augmentation: ~{abs(change):.1f}% (format QDQ peut être plus volumineux, mais inférence plus rapide)")
+            print(f"⚡ Note: QDQ est optimisé pour vitesse d'inférence, pas pour taille")
         
         # Nettoyer fichiers ONNX non quantifiés APRÈS quantification réussie
         print()
