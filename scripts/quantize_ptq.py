@@ -96,20 +96,17 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         # Quantifier chaque composant séparément (encoder, decoder)
         print("🔢 Quantification int8 (multi-fichiers)...")
         
-        # Configuration quantization dynamique (plus compatible avec ONNX Runtime standard)
-        # Utiliser QOperator au lieu de QDQ pour meilleure compatibilité
+        # Configuration quantization dynamique QDQ (compatible avec ONNX Runtime standard)
+        # QDQ est plus compatible que QOperator qui utilise ConvInteger non supporté
         from optimum.onnxruntime.configuration import QuantizationConfig
         
-        qconfig = AutoQuantizationConfig.avx512_vnni(
-            is_static=False,
-            per_channel=True,  # Meilleure qualité
+        qconfig = QuantizationConfig(
+            is_static=False,  # Dynamic quantization (pas besoin de calibration)
+            format="QDQ",     # QDQ format (plus compatible que QOperator)
+            mode="IntegerOps",
         )
         
-        # Alternative: quantization dynamique simple (plus compatible)
-        # qconfig = QuantizationConfig(
-        #     is_static=False,
-        #     format="QOperator",  # Plus compatible que QDQ
-        # )
+        print("  Configuration: Dynamic QDQ quantization (compatible ONNX Runtime)")
         
         # Lister les fichiers ONNX
         onnx_files = list(onnx_model_path.glob("*.onnx"))

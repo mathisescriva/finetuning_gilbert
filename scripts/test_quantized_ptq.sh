@@ -44,9 +44,9 @@ print("\n🔍 Test inférence...")
 dummy_audio = np.random.randn(16000).astype(np.float32)  # 1 seconde
 inputs = processor(dummy_audio, sampling_rate=16000, return_tensors="pt")
 
-with model.session:
-    output = model.generate(**inputs, max_length=50, language="fr")
-    transcription = processor.batch_decode(output, skip_special_tokens=True)[0]
+# Test génération (sans accès direct à session)
+output = model.generate(**inputs, max_length=50, language="fr")
+transcription = processor.batch_decode(output, skip_special_tokens=True)[0]
 
 print(f"✅ Transcription test: '{transcription[:50]}...'")
 print("\n✅ ✅ ✅ MODÈLE FONCTIONNEL! ✅ ✅ ✅")
