@@ -132,10 +132,22 @@ def deploy_model(
     
     # Vérifier le token
     if token is None:
-        token = os.environ.get("HUGGINGFACE_TOKEN")
+        token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
+        if not token:
+            # Essayer de récupérer depuis le fichier sauvegardé
+            token_file = Path.home() / ".hf_home" / "token"
+            if not token_file.exists():
+                token_file = Path("/workspace/.hf_home/token")
+            if token_file.exists():
+                token = token_file.read_text().strip()
+                print(f"📝 Token récupéré depuis: {token_file}")
+        
         if not token:
             raise ValueError(
-                "Token HuggingFace requis. Passez --token ou définissez HUGGINGFACE_TOKEN"
+                "Token HuggingFace requis. Options:\n"
+                "  1. Passez --token\n"
+                "  2. Définissez HUGGINGFACE_TOKEN ou HF_TOKEN\n"
+                "  3. Utilisez 'huggingface-cli login' ou 'hf auth login'"
             )
     
     # Vérifier que le modèle existe
@@ -159,18 +171,31 @@ def deploy_model(
     # API HuggingFace
     api = HfApi(token=token)
     
+    # Vérifier l'authentification
+    print("🔐 Vérification authentification...")
+    try:
+        user_info = api.whoami(token=token)
+        print(f"✅ Authentifié en tant que: {user_info.get('name', 'Unknown')}")
+    except Exception as e:
+        print(f"❌ Erreur authentification: {e}")
+        print("   Vérifiez que votre token est valide et a les permissions 'write'")
+        raise
+    
     # Créer le repo s'il n'existe pas
+    print()
+    print("📦 Création/vérification du repo...")
     try:
         api.create_repo(
             repo_id=repo_name,
             repo_type="model",
             private=private,
             exist_ok=True,
+            token=token,
         )
         print(f"✅ Repo créé/vérifié: {repo_name}")
     except Exception as e:
         print(f"⚠️  Erreur création repo: {e}")
-        print("   Tentative de continuation...")
+        print("   Le repo existe peut-être déjà, tentative de continuation...")
     
     # Upload les fichiers
     print()
