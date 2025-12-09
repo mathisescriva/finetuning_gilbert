@@ -78,17 +78,29 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         # Export ONNX standard (non quantifié, mais déjà plus rapide que PyTorch)
         onnx_model_path = output_path / "onnx"
         
-        # Vérifier si déjà exporté
-        if (onnx_model_path / "encoder_model.onnx").exists():
-            print("  ✅ Modèle ONNX déjà exporté, réutilisation...")
+        # Vérifier si déjà exporté et si les fichiers .onnx_data existent
+        onnx_exists = (onnx_model_path / "encoder_model.onnx").exists()
+        onnx_data_exists = (onnx_model_path / "encoder_model.onnx_data").exists()
+        
+        if onnx_exists and onnx_data_exists:
+            print("  ✅ Modèle ONNX déjà exporté avec fichiers .onnx_data, réutilisation...")
         else:
+            if onnx_exists and not onnx_data_exists:
+                print("  ⚠️  Modèle ONNX existe mais fichiers .onnx_data manquants")
+                print("  🔄 Ré-export nécessaire...")
+                # Supprimer l'ancien pour forcer la ré-export
+                import shutil
+                if onnx_model_path.exists():
+                    shutil.rmtree(onnx_model_path)
+                onnx_model_path.mkdir(exist_ok=True)
+            
             onnx_model = ORTModelForSpeechSeq2Seq.from_pretrained(
                 model_name_or_path,
                 export=True,
                 use_cache=False,
             )
             onnx_model.save_pretrained(str(onnx_model_path))
-            print("  ✅ Export ONNX réussi")
+            print("  ✅ Export ONNX réussi (avec fichiers .onnx_data)")
         
         # Libérer mémoire PyTorch
         print("  🧹 Libération mémoire PyTorch...")
@@ -102,18 +114,33 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         
         # Copier le modèle ONNX directement (déjà optimisé, plus rapide que PyTorch)
         print("📦 Copie modèle ONNX optimisé...")
+        copied_files = []
+        missing_files = []
+        
         for file in onnx_model_path.glob("*"):
             if file.is_file():
                 # Copier tous les fichiers nécessaires (y compris .onnx_data)
                 try:
                     shutil.copy2(file, quantized_path / file.name)
+                    copied_files.append(file.name)
                     if file.name.endswith(".onnx_data"):
                         size_mb = file.stat().st_size / 1e6
                         print(f"    Copié: {file.name} ({size_mb:.0f} MB)")
                 except Exception as e:
                     print(f"    ⚠️  Erreur copie {file.name}: {e}")
+                    missing_files.append(file.name)
         
-        print("  ✅ Modèle ONNX copié (avec fichiers .onnx_data)")
+        # Vérifier que les fichiers .onnx_data nécessaires sont présents
+        required_data_files = ["encoder_model.onnx_data", "decoder_model.onnx_data"]
+        for req_file in required_data_files:
+            if not (quantized_path / req_file).exists():
+                missing_files.append(req_file)
+        
+        if missing_files:
+            print(f"  ⚠️  Fichiers manquants: {', '.join(missing_files)}")
+            print(f"  💡 Vérifiez que l'export ONNX s'est bien terminé")
+        else:
+            print(f"  ✅ Modèle ONNX copié ({len(copied_files)} fichiers)")
         
         # Note: La quantization statique avec ConvInteger n'est pas supportée par ONNX Runtime standard
         # Le modèle ONNX non quantifié est déjà optimisé et plus rapide que PyTorch
