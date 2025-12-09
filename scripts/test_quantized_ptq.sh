@@ -25,8 +25,8 @@ print(f"Chargement depuis: {model_path}")
 
 model = ORTModelForSpeechSeq2Seq.from_pretrained(
     model_path,
-    encoder_file_name="encoder_model.onnx",
-    decoder_file_name="decoder_model.onnx",
+    encoder_file_name="encoder_model_quantized.onnx",
+    decoder_file_name="decoder_model_quantized.onnx",
     use_cache=False,
 )
 processor = AutoProcessor.from_pretrained(model_path)

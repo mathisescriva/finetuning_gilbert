@@ -170,10 +170,24 @@ def main():
         try:
             from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
             
+            # Détecter automatiquement les noms de fichiers ONNX
+            quantized_path = Path(args.quantized)
+            encoder_files = list(quantized_path.glob("encoder_model*.onnx"))
+            decoder_files = list(quantized_path.glob("decoder_model*.onnx"))
+            
+            encoder_name = "encoder_model_quantized.onnx" if any("quantized" in f.name for f in encoder_files) else "encoder_model.onnx"
+            decoder_name = "decoder_model_quantized.onnx" if any("quantized" in f.name for f in decoder_files) else "decoder_model.onnx"
+            
+            # Vérifier que les fichiers existent
+            if not (quantized_path / encoder_name).exists():
+                encoder_name = encoder_files[0].name if encoder_files else "encoder_model.onnx"
+            if not (quantized_path / decoder_name).exists():
+                decoder_name = decoder_files[0].name if decoder_files else "decoder_model.onnx"
+            
             model_quantized = ORTModelForSpeechSeq2Seq.from_pretrained(
                 args.quantized,
-                encoder_file_name="encoder_model.onnx",
-                decoder_file_name="decoder_model.onnx",
+                encoder_file_name=encoder_name,
+                decoder_file_name=decoder_name,
                 use_cache=False,
             )
             processor_quantized = AutoProcessor.from_pretrained(args.quantized)
