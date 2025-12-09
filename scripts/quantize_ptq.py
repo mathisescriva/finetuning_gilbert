@@ -61,7 +61,9 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
     processor.save_pretrained(output_path)
     
     print("✅ Modèle chargé")
-    print(f"📊 Taille avant quantization: {sum(p.numel() * 4 for p in model.parameters()) / 1e9:.2f} GB (float32)")
+    # Sauvegarder taille originale avant suppression
+    original_size = sum(p.numel() * 4 for p in model.parameters()) / 1e9
+    print(f"📊 Taille avant quantization: {original_size:.2f} GB (float32)")
     print()
     
     # Exporter et quantifier avec optimum (méthode simplifiée)
@@ -83,34 +85,13 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         onnx_model.save_pretrained(str(onnx_model_path))
         print("  ✅ Export ONNX réussi")
         
-        # NETTOYER après export pour libérer espace
-        print("  🧹 Nettoyage pour libérer espace...")
-        del model  # Libérer mémoire GPU/RAM
+        # Libérer mémoire PyTorch (mais garder fichiers ONNX pour quantification)
+        print("  🧹 Libération mémoire PyTorch...")
+        del model, onnx_model  # Libérer mémoire GPU/RAM
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        
-        # Supprimer fichiers .onnx_data volumineux (pas nécessaires pour quantification)
-        for onnx_data_file in onnx_model_path.glob("*.onnx_data"):
-            try:
-                onnx_data_file.unlink()
-                print(f"    Supprimé: {onnx_data_file.name}")
-            except:
-                pass
-        
-        # Nettoyer cache HuggingFace temporaire
-        cache_dir = "/workspace/.hf_home/hub"
-        if os.path.exists(cache_dir):
-            for item in os.listdir(cache_dir):
-                item_path = os.path.join(cache_dir, item)
-                # Garder seulement le modèle qu'on utilise
-                if os.path.isdir(item_path) and "whisper-large-v3-distil-fr-v0.2" not in item:
-                    try:
-                        shutil.rmtree(item_path)
-                    except:
-                        pass
-        
-        print("  ✅ Espace libéré")
+        print("  ✅ Mémoire libérée (fichiers ONNX conservés pour quantification)")
         
         # Quantifier chaque composant séparément (encoder, decoder)
         print("🔢 Quantification int8 (multi-fichiers)...")
@@ -207,11 +188,22 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 for f in quantized_path.rglob("*") 
                 if f.is_file()
             ) / 1e9
-            original_size = sum(p.numel() * 4 for p in model.parameters()) / 1e9
             reduction = (1 - total_size / original_size) * 100 if original_size > 0 else 0
             print(f"📊 Taille après quantization: ~{total_size:.2f} GB (int8)")
             print(f"📊 Taille originale: ~{original_size:.2f} GB (float32)")
             print(f"💾 Réduction: ~{reduction:.1f}%")
+        
+        # Nettoyer fichiers ONNX non quantifiés APRÈS quantification réussie
+        print()
+        print("  🧹 Nettoyage fichiers temporaires...")
+        for onnx_data_file in onnx_model_path.glob("*.onnx_data"):
+            try:
+                onnx_data_file.unlink()
+                print(f"    Supprimé: {onnx_data_file.name}")
+            except:
+                pass
+        # Garder les .onnx originaux pour référence (petits fichiers)
+        print("  ✅ Nettoyage terminé")
         
     except Exception as e:
         print(f"❌ Erreur lors de l'export/quantization: {e}")
