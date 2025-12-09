@@ -23,10 +23,19 @@ model_path = "outputs/models/gilbert-whisper-ptq-int8/quantized"
 
 print(f"Chargement depuis: {model_path}")
 
+# Détecter automatiquement les noms de fichiers ONNX
+model_dir = Path(model_path)
+encoder_files = list(model_dir.glob("encoder_model*.onnx"))
+decoder_files = list(model_dir.glob("decoder_model*.onnx"))
+
+# Utiliser encoder_model.onnx et decoder_model.onnx (sans _quantized)
+encoder_name = "encoder_model.onnx" if (model_dir / "encoder_model.onnx").exists() else (encoder_files[0].name if encoder_files else "encoder_model.onnx")
+decoder_name = "decoder_model.onnx" if (model_dir / "decoder_model.onnx").exists() else (decoder_files[0].name if decoder_files else "decoder_model.onnx")
+
 model = ORTModelForSpeechSeq2Seq.from_pretrained(
     model_path,
-    encoder_file_name="encoder_model_quantized.onnx",
-    decoder_file_name="decoder_model_quantized.onnx",
+    encoder_file_name=encoder_name,
+    decoder_file_name=decoder_name,
     use_cache=False,
 )
 processor = AutoProcessor.from_pretrained(model_path)
