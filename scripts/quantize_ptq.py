@@ -5,13 +5,15 @@ Simple et rapide - pas besoin de données d'entraînement.
 """
 
 import argparse
+import os
+import gc
 import torch
+import shutil
+from pathlib import Path
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 from optimum.onnxruntime.configuration import AutoQuantizationConfig
 from optimum.onnxruntime import ORTQuantizer
-from pathlib import Path
-import os
 
 
 def quantize_to_int8(model_name_or_path: str, output_path: str):
@@ -25,7 +27,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
     
     # Changer le cache HuggingFace vers /workspace (plus d'espace)
     # NETTOYER AVANT de télécharger
-    import shutil
     cache_dir = "/workspace/.hf_home"
     if os.path.exists(cache_dir):
         # Supprimer seulement les anciens téléchargements
@@ -85,10 +86,9 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         # NETTOYER après export pour libérer espace
         print("  🧹 Nettoyage pour libérer espace...")
         del model  # Libérer mémoire GPU/RAM
-        import gc
-        import torch
         gc.collect()
-        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         # Supprimer fichiers .onnx_data volumineux (pas nécessaires pour quantification)
         for onnx_data_file in onnx_model_path.glob("*.onnx_data"):
@@ -158,7 +158,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 quantized_files[onnx_file.name] = target_file.name
                 
                 # Nettoyer
-                import shutil
                 shutil.rmtree(temp_quant_dir)
                 print(f"    ✅ {onnx_file.name} quantifié")
                 
@@ -173,7 +172,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         for file in onnx_model_path.glob("*"):
             if file.is_file() and file.suffix != ".onnx" and not file.name.endswith(".onnx_data"):
                 try:
-                    import shutil
                     shutil.copy2(file, quantized_path / file.name)
                 except OSError as e:
                     if "No space" in str(e):
