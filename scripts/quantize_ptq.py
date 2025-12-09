@@ -24,6 +24,22 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
     print()
     
     # Changer le cache HuggingFace vers /workspace (plus d'espace)
+    # NETTOYER AVANT de télécharger
+    import shutil
+    cache_dir = "/workspace/.hf_home"
+    if os.path.exists(cache_dir):
+        # Supprimer seulement les anciens téléchargements
+        for item in os.listdir(cache_dir):
+            item_path = os.path.join(cache_dir, item)
+            if os.path.isdir(item_path):
+                # Garder seulement le modèle qu'on va télécharger
+                if "whisper-large-v3-distil-fr-v0.2" not in item:
+                    try:
+                        shutil.rmtree(item_path)
+                        print(f"  Supprimé: {item}")
+                    except:
+                        pass
+    
     os.environ["HF_HOME"] = "/workspace/.hf_home"
     os.environ["TRANSFORMERS_CACHE"] = "/workspace/.hf_home/hub"
     os.environ["HF_DATASETS_CACHE"] = "/workspace/.hf_home/datasets"
