@@ -12,30 +12,40 @@ import numpy as np
 
 def benchmark_model(model, processor, device="cuda", num_runs=5):
     """Benchmark vitesse d'inférence"""
-    model.eval()
-    model.to(device)
+    # Pour PyTorch: .eval() et .to(device), pour ONNX: déjà optimisé
+    if hasattr(model, 'eval'):
+        model.eval()
+    if hasattr(model, 'to'):
+        model.to(device)
     
     # Créer des features audio dummy (30 secondes à 16kHz)
     dummy_audio = np.random.randn(480000).astype(np.float32)  # 30s * 16000 Hz
     inputs = processor(dummy_audio, sampling_rate=16000, return_tensors="pt")
     
     # Convertir au bon dtype (même que le modèle)
-    model_dtype = next(model.parameters()).dtype if hasattr(model, 'parameters') and next(model.parameters(), None) is not None else torch.float16
+    # Pour ONNX, on utilise float32, pour PyTorch on détecte le dtype
+    if hasattr(model, 'parameters') and next(model.parameters(), None) is not None:
+        model_dtype = next(model.parameters()).dtype
+    else:
+        model_dtype = torch.float32  # ONNX utilise généralement float32
     inputs = {k: v.to(device).to(model_dtype) if isinstance(v, torch.Tensor) and v.dtype.is_floating_point else v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
     
     # Warmup
-    with torch.no_grad():
+    no_grad_context = torch.no_grad() if hasattr(torch, 'no_grad') else lambda: __import__('contextlib').nullcontext()
+    with no_grad_context():
         _ = model.generate(**inputs, max_length=100)
     
     # Benchmark
     times = []
-    torch.cuda.synchronize() if device == "cuda" else None
+    if device == "cuda" and torch.cuda.is_available():
+        torch.cuda.synchronize()
     
     for _ in range(num_runs):
         start = time.time()
-        with torch.no_grad():
+        with no_grad_context():
             _ = model.generate(**inputs, max_length=100)
-        torch.cuda.synchronize() if device == "cuda" else None
+        if device == "cuda" and torch.cuda.is_available():
+            torch.cuda.synchronize()
         end = time.time()
         times.append(end - start)
     
