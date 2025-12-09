@@ -29,17 +29,17 @@ os.makedirs(os.environ["TMPDIR"], exist_ok=True)
 
 
 def prepare_dataset_simple(dataset_name, config, split, processor, max_samples=10000):
-    """Charge et prépare un dataset de manière simple (limité en mémoire)."""
+    """Charge et prépare un dataset avec streaming pour éviter téléchargement complet."""
     print(f"📊 Chargement {dataset_name} ({config}) - split: {split}")
+    print(f"   Mode streaming (limité à {max_samples} échantillons)")
     
-    # Charger dataset
-    dataset = load_dataset(dataset_name, config, split=split, streaming=False)
+    # Charger en streaming pour éviter téléchargement complet
+    dataset_stream = load_dataset(dataset_name, config, split=split, streaming=True)
     
-    # Limiter immédiatement
-    if len(dataset) > max_samples:
-        dataset = dataset.select(range(max_samples))
+    # Limiter avec take()
+    dataset_stream = dataset_stream.take(max_samples)
     
-    print(f"✅ {len(dataset)} échantillons chargés")
+    print(f"✅ Dataset streaming configuré")
     
     # Fonction de preprocessing
     def prepare_example(example):
@@ -74,17 +74,29 @@ def prepare_dataset_simple(dataset_name, config, split, processor, max_samples=1
             "labels": labels,
         }
     
-    # Appliquer preprocessing
-    print("🔧 Preprocessing...")
-    dataset = dataset.map(
-        prepare_example,
-        remove_columns=[col for col in dataset.column_names],
-        num_proc=2,  # Réduire workers pour éviter problèmes mémoire
-        desc="Preprocessing audio",
-    )
+    # Pour streaming, on doit convertir en liste d'abord (mais petit batch)
+    print("🔧 Preprocessing (streaming, batch par batch)...")
     
-    # Filtrer None (si certains exemples ont échoué)
-    dataset = dataset.filter(lambda x: x["input_features"] is not None)
+    # Convertir streaming en list (petit batch à la fois)
+    from datasets import Dataset
+    processed_items = []
+    
+    for i, item in enumerate(dataset_stream):
+        processed = prepare_example(item)
+        if processed is not None:
+            processed_items.append(processed)
+        
+        if (i + 1) % 100 == 0:
+            print(f"   Traité {i + 1} échantillons...")
+        
+        # Arrêter si on a atteint max_samples
+        if len(processed_items) >= max_samples:
+            break
+    
+    print(f"✅ {len(processed_items)} échantillons préprocessés")
+    
+    # Créer dataset depuis la liste
+    dataset = Dataset.from_list(processed_items)
     
     return dataset
 
