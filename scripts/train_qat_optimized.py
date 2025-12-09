@@ -319,7 +319,7 @@ def main():
         warmup_steps=200,
         num_train_epochs=args.num_epochs if not is_streaming else None,
         max_steps=max_steps if is_streaming else None,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         eval_steps=1000 if not is_streaming else steps_per_epoch // 2,  # Eval moins souvent en streaming
         save_strategy="steps",
         save_steps=2000 if not is_streaming else steps_per_epoch,  # Sauvegarder à chaque epoch
