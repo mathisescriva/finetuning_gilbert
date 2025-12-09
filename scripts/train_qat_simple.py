@@ -46,30 +46,45 @@ def prepare_dataset_simple(dataset_name, config, split, processor, max_samples=1
         audio = example["audio"]
         text = example.get("text", "")
         
+        # Vérifier format audio
+        if isinstance(audio, dict):
+            audio_array = audio.get("array", None)
+            sr = audio.get("sampling_rate", 16000)
+        else:
+            audio_array = audio
+            sr = 16000
+        
+        if audio_array is None:
+            return None
+        
         # Preprocess audio avec processor
         inputs = processor(
-            audio=audio["array"],
-            sampling_rate=audio["sampling_rate"],
+            audio=audio_array,
+            sampling_rate=sr,
             text=text,
             return_tensors="pt",
         )
         
-        # Convertir en format attendu
-        input_features = inputs.input_features.squeeze(0)
-        labels = inputs.input_ids.squeeze(0)
+        # Convertir en format attendu (numpy pour compatibilité)
+        input_features = inputs.input_features.squeeze(0).numpy()
+        labels = inputs.input_ids.squeeze(0).numpy()
         
         return {
-            "input_features": input_features.numpy(),
-            "labels": labels.numpy(),
+            "input_features": input_features,
+            "labels": labels,
         }
     
     # Appliquer preprocessing
     print("🔧 Preprocessing...")
     dataset = dataset.map(
         prepare_example,
-        remove_columns=[col for col in dataset.column_names if col != "audio"],
-        num_proc=4,
+        remove_columns=[col for col in dataset.column_names],
+        num_proc=2,  # Réduire workers pour éviter problèmes mémoire
+        desc="Preprocessing audio",
     )
+    
+    # Filtrer None (si certains exemples ont échoué)
+    dataset = dataset.filter(lambda x: x["input_features"] is not None)
     
     return dataset
 
@@ -77,6 +92,9 @@ def prepare_dataset_simple(dataset_name, config, split, processor, max_samples=1
 def compute_metrics(eval_pred, processor):
     """Calcule WER."""
     predictions, labels = eval_pred
+    
+    # Remplacer -100 par pad_token_id
+    labels[labels == -100] = processor.tokenizer.pad_token_id
     
     # Décoder
     pred_str = processor.batch_decode(predictions, skip_special_tokens=True)
