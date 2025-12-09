@@ -82,6 +82,37 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         onnx_model.save_pretrained(str(onnx_model_path))
         print("  ✅ Export ONNX réussi")
         
+        # NETTOYER après export pour libérer espace
+        print("  🧹 Nettoyage pour libérer espace...")
+        del model  # Libérer mémoire GPU/RAM
+        import gc
+        import torch
+        gc.collect()
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        
+        # Supprimer fichiers .onnx_data volumineux (pas nécessaires pour quantification)
+        for onnx_data_file in onnx_model_path.glob("*.onnx_data"):
+            try:
+                onnx_data_file.unlink()
+                print(f"    Supprimé: {onnx_data_file.name}")
+            except:
+                pass
+        
+        # Nettoyer cache HuggingFace temporaire
+        import shutil
+        cache_dir = "/workspace/.hf_home/hub"
+        if os.path.exists(cache_dir):
+            for item in os.listdir(cache_dir):
+                item_path = os.path.join(cache_dir, item)
+                # Garder seulement le modèle qu'on utilise
+                if os.path.isdir(item_path) and "whisper-large-v3-distil-fr-v0.2" not in item:
+                    try:
+                        shutil.rmtree(item_path)
+                    except:
+                        pass
+        
+        print("  ✅ Espace libéré")
+        
         # Quantifier chaque composant séparément (encoder, decoder)
         print("🔢 Quantification int8 (multi-fichiers)...")
         
