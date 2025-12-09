@@ -309,6 +309,8 @@ def main():
         steps_per_epoch = (args.max_samples or 60000) // (args.per_device_batch_size * args.gradient_accumulation_steps)
         max_steps = steps_per_epoch * args.num_epochs
         print(f"   Mode streaming: ~{steps_per_epoch} steps/epoch, {max_steps} steps total")
+    else:
+        max_steps = None
     
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
@@ -317,8 +319,8 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
         warmup_steps=200,
-        num_train_epochs=args.num_epochs if not is_streaming else None,
-        max_steps=max_steps if is_streaming else None,
+        num_train_epochs=args.num_epochs if not is_streaming else 1,  # Mettre 1 au lieu de None
+        max_steps=max_steps,  # Si max_steps est défini, num_epochs sera ignoré
         eval_strategy="steps",
         eval_steps=1000 if not is_streaming else steps_per_epoch // 2,  # Eval moins souvent en streaming
         save_strategy="steps",
