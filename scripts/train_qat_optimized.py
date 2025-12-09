@@ -22,7 +22,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.data.dataset import prepare_dataset, create_meetings_dataset_from_files
+from src.data.dataset import prepare_dataset, create_meetings_dataset_from_files, MeetingsDataset
 from src.data.augmentations import create_augmentation_pipeline
 from src.evaluation.metrics import compute_wer
 from src.training.trainer import DataCollatorSpeechSeq2SeqWithPadding
@@ -97,6 +97,19 @@ def prepare_qat_model(base_model_path: str, quantization_type: str = "int8"):
     )
     
     return qat_model.model
+
+
+def create_meetings_dataset_from_streaming(streaming_dataset, processor, augmentations=None, max_samples=None):
+    """Crée un MeetingsDataset à partir d'un dataset streaming."""
+    # MeetingsDataset peut gérer directement les datasets streaming (IterableDataset)
+    return MeetingsDataset(
+        dataset=streaming_dataset,
+        processor=processor,
+        augmentations=augmentations,
+        max_duration=30.0,
+        min_duration=1.0,
+        sample_rate=16000,
+    )
 
 
 def compute_metrics_qat(pred, processor, metric_key_prefix: str = "eval"):
@@ -223,7 +236,7 @@ def main():
         if args.max_samples and len(train_dataset) > args.max_samples:
             train_dataset = train_dataset.select(range(args.max_samples))
     else:
-        # HuggingFace dataset - Utiliser streaming natif avec Trainer
+        # HuggingFace dataset - Utiliser streaming natif avec MeetingsDataset
         print(f"   Chargement dataset en streaming (pas de chargement complet en mémoire)...")
         
         # Charger en streaming (IterableDataset)
@@ -250,36 +263,16 @@ def main():
             # Limiter eval à 1000 max
             eval_dataset_stream = eval_dataset_stream.take(min(1000, args.max_samples // 10))
         
-        print(f"   ✅ Dataset en streaming configuré (chargement batch par batch)")
-        print(f"   Le Trainer gérera automatiquement le streaming")
+        print(f"   ✅ Dataset en streaming configuré")
+        print(f"   Utilisation MeetingsDataset pour preprocessing batch par batch")
         
-        # Convertir en dataset normal avec prepare_dataset pour transformation
-        # Mais utiliser directement le streaming si prepare_dataset ne fonctionne pas
-        use_streaming_direct = True
-        try:
-            # Essayer prepare_dataset mais avec streaming
-            from src.data.dataset import prepare_dataset
-            train_dataset = prepare_dataset(
-                args.train_data,
-                processor,
-                split="train",
-                augmentations=create_augmentation_pipeline({}),
-                streaming=True,
-            )
-            # Appliquer limitation
-            if args.max_samples and hasattr(train_dataset, 'take'):
-                train_dataset = train_dataset.take(args.max_samples)
-            use_streaming_direct = False
-        except Exception as e:
-            print(f"⚠️  prepare_dataset streaming échoué: {e}")
-            print(f"   Utilisation streaming direct avec transformations minimales")
-        
-        if use_streaming_direct:
-            # Utiliser le streaming directement - Trainer peut le gérer
-            dataset_full = train_dataset_stream
-        
-            # Utiliser dataset streaming directement
-            train_dataset = train_dataset_stream
+        # Utiliser MeetingsDataset qui gère le streaming et le preprocessing
+        train_dataset = create_meetings_dataset_from_streaming(
+            train_dataset_stream,
+            processor,
+            augmentations=create_augmentation_pipeline({}),
+            max_samples=args.max_samples,
+        )
     
     # Eval dataset - utiliser streaming aussi
     if args.eval_data.endswith('.json'):
@@ -295,28 +288,20 @@ def main():
             augmentations=None,
         )
     else:
-        # Utiliser eval dataset streaming
-        if use_streaming_direct:
-            eval_dataset = eval_dataset_stream
-        else:
-            try:
-                eval_dataset = prepare_dataset(
-                    args.eval_data,
-                    processor,
-                    split="dev" if "multilingual_librispeech" in args.eval_data else "validation",
-                    augmentations=None,
-                    streaming=True,
-                )
-                eval_dataset = eval_dataset.take(min(1000, args.max_samples // 10) if args.max_samples else 1000)
-            except:
-                eval_dataset = eval_dataset_stream
+        # Utiliser eval dataset streaming avec MeetingsDataset
+        eval_dataset = create_meetings_dataset_from_streaming(
+            eval_dataset_stream,
+            processor,
+            augmentations=None,
+            max_samples=1000,
+        )
     
     # Data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
     
     # Arguments d'entraînement optimisés
-    # Pour streaming, on doit utiliser max_steps au lieu de num_epochs
-    is_streaming = isinstance(train_dataset, type(load_dataset("dummy", split="train", streaming=True)))
+    # Pour streaming (IterableDataset), on doit utiliser max_steps au lieu de num_epochs
+    is_streaming = isinstance(train_dataset, MeetingsDataset) and hasattr(train_dataset.dataset, '__iter__')
     
     if is_streaming:
         # Avec streaming, calculer max_steps approximatif
