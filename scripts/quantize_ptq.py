@@ -99,7 +99,6 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
                 pass
         
         # Nettoyer cache HuggingFace temporaire
-        import shutil
         cache_dir = "/workspace/.hf_home/hub"
         if os.path.exists(cache_dir):
             for item in os.listdir(cache_dir):
