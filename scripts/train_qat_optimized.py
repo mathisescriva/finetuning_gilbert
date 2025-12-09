@@ -328,7 +328,7 @@ def main():
         metric_for_best_model="eval_wer" if not is_streaming else None,
         greater_is_better=False,
         push_to_hub=False,
-        report_to=["tensorboard"],
+        report_to=[],  # Pas de TensorBoard pour éviter dépendance
         fp16=True if device == "cuda" else False,
         bf16=False,
         lr_scheduler_type="cosine",
@@ -347,7 +347,7 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=data_collator,
         compute_metrics=lambda pred: compute_metrics_qat(pred, processor),
-        tokenizer=processor.feature_extractor,
+        processing_class=processor.feature_extractor,
     )
     
     # Entraînement
