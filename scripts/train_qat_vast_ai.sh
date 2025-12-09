@@ -14,7 +14,8 @@ QUANT_TYPE="int8"  # int8 ou int4
 OUTPUT_DIR="outputs/models/gilbert-whisper-qat-${QUANT_TYPE}"
 MAX_SAMPLES=60000  # ~500h de données (optimisé pour vitesse)
 NUM_EPOCHS=5
-BATCH_SIZE=8
+# RTX 5090 peut gérer batch_size plus grand pour accélérer
+BATCH_SIZE=16  # Optimisé pour RTX 5090 (peut même monter à 32 si VRAM suffit)
 LEARNING_RATE=5e-6
 
 # Vérifier qu'on est dans le bon répertoire
