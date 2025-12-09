@@ -135,6 +135,8 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
         print(f"   from optimum.onnxruntime import ORTModelForSpeechSeq2Seq")
         print(f"   model = ORTModelForSpeechSeq2Seq.from_pretrained('{quantized_path}')")
         print()
+        print("📝 Note: Le modèle est directement dans le répertoire 'onnx' pour économiser l'espace disque")
+        print()
         print("📊 Note: Modèle ONNX (non quantifié) mais optimisé")
         print("   - Plus rapide que PyTorch (~2-3x)")
         print("   - Moins de mémoire GPU")

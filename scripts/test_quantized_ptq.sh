@@ -3,7 +3,7 @@
 
 set -e
 
-MODEL_PATH="outputs/models/gilbert-whisper-ptq-int8/quantized"
+MODEL_PATH="outputs/models/gilbert-whisper-ptq-int8/onnx"
 
 echo "🧪 TEST DU MODÈLE QUANTIFIÉ PTQ"
 echo "================================"
