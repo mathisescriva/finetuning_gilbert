@@ -227,19 +227,47 @@ def main():
         try:
             # Essayer de charger avec config (pour MLS: facebook/multilingual_librispeech + french)
             if "multilingual_librispeech" in args.train_data:
-                print(f"   Chargement MLS français...")
-                dataset_full = load_dataset(
+                print(f"   Chargement MLS français (streaming pour économiser espace)...")
+                # Utiliser streaming pour éviter de remplir le disque
+                dataset_stream = load_dataset(
                     args.train_data, 
                     "french", 
                     split="train", 
-                    streaming=False
+                    streaming=True
                 )
+                # Convertir en dataset normal avec limitation immédiate
+                print(f"   Conversion streaming → dataset (limité à {args.max_samples or 60000} échantillons)...")
+                from datasets import Dataset
+                dataset_list = []
+                for i, item in enumerate(dataset_stream):
+                    if args.max_samples and i >= args.max_samples:
+                        break
+                    dataset_list.append(item)
+                    if (i + 1) % 1000 == 0:
+                        print(f"      Chargé {i + 1} échantillons...")
+                dataset_full = Dataset.from_list(dataset_list)
+                print(f"   ✅ {len(dataset_full)} échantillons chargés")
             else:
                 dataset_full = load_dataset(args.train_data, split="train", streaming=False)
         except Exception as e:
             print(f"⚠️  Erreur chargement dataset: {e}")
-            print(f"   Tentative avec split='train' uniquement...")
-            dataset_full = load_dataset(args.train_data, split="train", streaming=False)
+            print(f"   Tentative avec streaming=True (économise espace disque)...")
+            # Utiliser streaming pour éviter de télécharger tout le dataset
+            dataset_full = load_dataset(
+                args.train_data, 
+                "french" if "multilingual_librispeech" in args.train_data else None,
+                split="train", 
+                streaming=True
+            )
+            # Convertir en dataset normal avec limitation
+            print(f"   Chargement avec streaming (limité à {args.max_samples} échantillons)...")
+            dataset_list = []
+            for i, item in enumerate(dataset_full):
+                if args.max_samples and i >= args.max_samples:
+                    break
+                dataset_list.append(item)
+            from datasets import Dataset
+            dataset_full = Dataset.from_list(dataset_list)
         
         if args.max_samples and len(dataset_full) > args.max_samples:
             print(f"   Limitation à {args.max_samples} échantillons")

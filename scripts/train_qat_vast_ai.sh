@@ -47,15 +47,18 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Vérifier datasets
+# Vérifier espace disque
+DISK_USAGE=$(df /workspace | tail -1 | awk '{print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -gt 85 ]; then
+    echo "⚠️  Espace disque faible ($DISK_USAGE%), nettoyage..."
+    bash scripts/free_disk_space.sh || echo "   Note: Script de nettoyage non disponible"
+fi
+
+# Vérifier datasets (on utilise maintenant streaming, pas besoin de télécharger)
 echo "📊 Vérification datasets..."
-if [ ! -d "data/processed/common_voice_fr" ] && [ ! -f "data/train.json" ]; then
-    echo "⚠️  Aucun dataset trouvé"
-    echo "   Téléchargement Common Voice (peut prendre 10-30 min)..."
-    python scripts/download_datasets.py \
-        --datasets common_voice \
-        --max_samples ${MAX_SAMPLES} \
-        --output_dir data/processed
+echo "   Utilisation streaming (pas de téléchargement complet nécessaire)"
+if [ ! -f "data/train.json" ]; then
+    echo "   Dataset sera chargé en streaming depuis HuggingFace"
 fi
 
 # Déterminer train/eval data
