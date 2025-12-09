@@ -111,35 +111,55 @@ def quantize_to_int8(model_name_or_path: str, output_path: str):
             torch.cuda.empty_cache()
         print("  ✅ Mémoire libérée")
         
-        # Copier le modèle ONNX directement (déjà optimisé, plus rapide que PyTorch)
-        print("📦 Copie modèle ONNX optimisé...")
-        copied_files = []
-        missing_files = []
+        # Utiliser directement le répertoire onnx (évite duplication de gros fichiers)
+        print("📦 Préparation modèle ONNX optimisé...")
         
+        # Copier seulement les petits fichiers de config (pas les .onnx_data volumineux)
+        small_files = []
         for file in onnx_model_path.glob("*"):
             if file.is_file():
-                # Copier tous les fichiers nécessaires (y compris .onnx_data)
+                # Copier seulement les petits fichiers (config, json, txt)
+                # Les fichiers .onnx et .onnx_data restent dans le répertoire onnx
+                if file.suffix in [".json", ".txt"] or (file.suffix == ".onnx" and not file.name.endswith("_data")):
+                    try:
+                        shutil.copy2(file, quantized_path / file.name)
+                        small_files.append(file.name)
+                    except Exception as e:
+                        print(f"    ⚠️  Erreur copie {file.name}: {e}")
+        
+        # Créer des liens symboliques vers les fichiers .onnx_data (évite duplication)
+        print("  Création liens symboliques pour fichiers .onnx_data...")
+        onnx_data_links = []
+        for onnx_file in onnx_model_path.glob("*.onnx"):
+            data_file = onnx_model_path / f"{onnx_file.stem}.onnx_data"
+            if data_file.exists():
                 try:
-                    shutil.copy2(file, quantized_path / file.name)
-                    copied_files.append(file.name)
-                    if file.name.endswith(".onnx_data"):
-                        size_mb = file.stat().st_size / 1e6
-                        print(f"    Copié: {file.name} ({size_mb:.0f} MB)")
+                    link_path = quantized_path / data_file.name
+                    if link_path.exists() or link_path.is_symlink():
+                        link_path.unlink()
+                    link_path.symlink_to(data_file.absolute())
+                    size_mb = data_file.stat().st_size / 1e6
+                    onnx_data_links.append(data_file.name)
+                    print(f"    Lien: {data_file.name} ({size_mb:.0f} MB)")
                 except Exception as e:
-                    print(f"    ⚠️  Erreur copie {file.name}: {e}")
-                    missing_files.append(file.name)
+                    print(f"    ⚠️  Erreur lien {data_file.name}: {e}")
+                    # Si les liens symboliques ne fonctionnent pas, essayer de copier
+                    try:
+                        shutil.copy2(data_file, quantized_path / data_file.name)
+                        print(f"    Copié: {data_file.name}")
+                    except:
+                        pass
         
-        # Vérifier que les fichiers .onnx_data nécessaires sont présents
-        required_data_files = ["encoder_model.onnx_data", "decoder_model.onnx_data"]
-        for req_file in required_data_files:
-            if not (quantized_path / req_file).exists():
-                missing_files.append(req_file)
+        # Copier aussi les fichiers .onnx (petits, pas les .onnx_data)
+        for onnx_file in onnx_model_path.glob("*.onnx"):
+            if not onnx_file.name.endswith("_data"):
+                try:
+                    if not (quantized_path / onnx_file.name).exists():
+                        shutil.copy2(onnx_file, quantized_path / onnx_file.name)
+                except Exception as e:
+                    print(f"    ⚠️  Erreur copie {onnx_file.name}: {e}")
         
-        if missing_files:
-            print(f"  ⚠️  Fichiers manquants: {', '.join(missing_files)}")
-            print(f"  💡 Vérifiez que l'export ONNX s'est bien terminé")
-        else:
-            print(f"  ✅ Modèle ONNX copié ({len(copied_files)} fichiers)")
+        print(f"  ✅ Modèle ONNX préparé ({len(small_files)} fichiers config, {len(onnx_data_links)} liens .onnx_data)")
         
         # Note: La quantization statique avec ConvInteger n'est pas supportée par ONNX Runtime standard
         # Le modèle ONNX non quantifié est déjà optimisé et plus rapide que PyTorch
